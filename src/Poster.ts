@@ -334,7 +334,7 @@ export default class Poster {
 					console.error(`Invalid private key type: ${privateKey.type}`);
 					break;
 				}
-				let tags: string[][] = [
+				const tags: string[][] = [
 					// @TODO: put relay URL as the 3rd element of the "e" tag array
 					["e", repost.id],
 					["p", repost.pubkey]
