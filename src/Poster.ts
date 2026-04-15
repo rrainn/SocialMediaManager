@@ -9,12 +9,20 @@ import { resizeImage } from "./utils/resizeImage";
 import { parseHashtags } from "./utils/parseHashtags";
 import { defaultIncludeHashtags, SocialNetwork, SocialNetworkType } from "./types/Config";
 
-import { createHash, randomUUID, UUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import Jimp from "jimp";
 import * as blurhash from "blurhash";
-import { GeneralObject } from "js-object-utilities";
 import { getImageSize } from "./utils/getImageSize";
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
+
+interface PostResult {
+	id?: string;
+	pubkey?: string;
+	parent?: { uri: string; cid: string };
+	root?: { uri: string; cid: string };
+	key?: string;
+	tags?: unknown;
+}
 
 export interface PostContent {
 	message: string;
@@ -80,8 +88,8 @@ export default class Poster {
 		};
 	}>;
 	async post(socialNetwork: SocialNetwork & {"type": SocialNetworkType.nostr}, content: PostContent): Promise<nostrtools.VerifiedEvent>;
-	async post(socialNetwork: SocialNetwork, content: PostContent): Promise<{[key: string]: any} | undefined>;
-	async post(socialNetwork: SocialNetwork, content: PostContent): Promise<{[key: string]: any} | undefined> {
+	async post(socialNetwork: SocialNetwork, content: PostContent): Promise<PostResult | undefined>;
+	async post(socialNetwork: SocialNetwork, content: PostContent): Promise<PostResult | undefined> {
 		switch (socialNetwork.type) {
 			case "mastodon": {
 				const masto = Masto({
@@ -99,13 +107,11 @@ export default class Poster {
 				} catch (e) {
 					console.error("Error uploading Mastodon image", e);
 				}
-				const mastodonPost: {[key: string]: any} = {
-					"status": content.message
-				};
-				if (imageId) {
-					mastodonPost.media_ids = [imageId];
-				}
-				const mastodonResult = await masto.v1.statuses.create(mastodonPost as any);
+				const mastodonResult = await masto.v1.statuses.create(
+					imageId
+						? { "status": content.message, "mediaIds": [imageId] }
+						: { "status": content.message }
+				);
 				return mastodonResult;
 			}
 			case "bluesky": {
@@ -213,7 +219,6 @@ export default class Poster {
 				if (content.image) {
 					if (socialNetwork.imageHandler) {
 						if (socialNetwork.imageHandler.type === SocialNetworkType.s3) {
-							let imageKey: UUID | undefined;
 							const client = new S3({
 								"credentials": {
 									"accessKeyId": socialNetwork.imageHandler.credentials.accessKeyId,
@@ -222,7 +227,7 @@ export default class Poster {
 								"region": socialNetwork.imageHandler.credentials.region
 							});
 
-							imageKey = randomUUID();
+							const imageKey = randomUUID();
 							try {
 								await client.putObject({
 									"Bucket": socialNetwork.imageHandler.credentials.bucket,
@@ -245,8 +250,8 @@ export default class Poster {
 								const jimpBlurhashImg = jimpImg.resize(width / 4, height / 4);
 								const blurhashWidth = jimpBlurhashImg.getWidth();
 								const blurhashHeight = jimpBlurhashImg.getHeight();
-								const blurhashPixels: any[] = (() => {
-									const pixels: any[] = [];
+								const blurhashPixels: number[] = (() => {
+									const pixels: number[] = [];
 									// Extract RGB pixel data to Uint8ClampedArray
 									const scanIterator = jimpBlurhashImg.scanIterator(0, 0, blurhashWidth, blurhashHeight)
 									for (const { idx } of scanIterator) {
@@ -291,12 +296,12 @@ export default class Poster {
 				}, privateKey.data);
 				try {
 					await Promise.all(pool.publish(socialNetwork.credentials.relays, event));
-				} catch (e) {}
+				} catch {}
 				return event;
 		}
 	}
 
-	async repost(socialNetwork: SocialNetwork & {"type": SocialNetworkType.bluesky}, repost: GeneralObject<any>): Promise<{
+	async repost(socialNetwork: SocialNetwork & {"type": SocialNetworkType.bluesky}, repost: PostResult): Promise<{
 		"root": {
 			uri: string;
 			cid: string;
@@ -306,22 +311,22 @@ export default class Poster {
 			cid: string;
 		};
 	}>;
-	async repost(socialNetwork: SocialNetwork & {"type": SocialNetworkType.nostr}, repost: GeneralObject<any>): Promise<nostrtools.VerifiedEvent>;
-	async repost(socialNetwork: SocialNetwork, repost: GeneralObject<any>): Promise<{[key: string]: any} | undefined>;
-	async repost(socialNetwork: SocialNetwork, repost: GeneralObject<any>): Promise<{[key: string]: any} | undefined> {
+	async repost(socialNetwork: SocialNetwork & {"type": SocialNetworkType.nostr}, repost: PostResult): Promise<nostrtools.VerifiedEvent>;
+	async repost(socialNetwork: SocialNetwork, repost: PostResult): Promise<PostResult | undefined>;
+	async repost(socialNetwork: SocialNetwork, repost: PostResult): Promise<PostResult | undefined> {
 		switch (socialNetwork.type) {
 			case "mastodon": {
 				const masto = Masto({
 					"url": `${socialNetwork.credentials.endpoint}`,
 					"accessToken": socialNetwork.credentials.password
 				});
-				const mastodonResult = await masto.v1.statuses.$select(repost.id).reblog();
+				const mastodonResult = await masto.v1.statuses.$select(repost.id!).reblog();
 				return mastodonResult;
 			}
 			case "bluesky": {
 				const bluesky = await this.#getBlueskyAgent(socialNetwork);
 
-				const blueskyResult = await bluesky.repost(repost.parent.uri, repost.parent.cid);
+				const blueskyResult = await bluesky.repost(repost.parent!.uri, repost.parent!.cid);
 				return {
 					"root": blueskyResult,
 					"parent": blueskyResult
@@ -336,8 +341,8 @@ export default class Poster {
 				}
 				const tags: string[][] = [
 					// @TODO: put relay URL as the 3rd element of the "e" tag array
-					["e", repost.id],
-					["p", repost.pubkey]
+					["e", repost.id!],
+					["p", repost.pubkey!]
 				];
 
 				const event = nostrtools.finalizeEvent({
@@ -348,13 +353,13 @@ export default class Poster {
 				}, privateKey.data);
 				try {
 					await Promise.all(pool.publish(socialNetwork.credentials.relays, event));
-				} catch (e) {}
+				} catch {}
 				return event;
 			}
 		}
 	}
 
-	async reply(socialNetwork: SocialNetwork & {"type": SocialNetworkType.bluesky}, replyTo: GeneralObject<any>, content: PostContent): Promise<{
+	async reply(socialNetwork: SocialNetwork & {"type": SocialNetworkType.bluesky}, replyTo: PostResult, content: PostContent): Promise<{
 		"root": {
 			uri: string;
 			cid: string;
@@ -364,9 +369,9 @@ export default class Poster {
 			cid: string;
 		};
 	}>;
-	async reply(socialNetwork: SocialNetwork & {"type": SocialNetworkType.nostr}, replyTo: GeneralObject<any>, content: PostContent): Promise<nostrtools.VerifiedEvent>;
-	async reply(socialNetwork: SocialNetwork, replyTo: GeneralObject<any>, content: PostContent): Promise<{ [key: string]: any } | undefined>;
-	async reply(socialNetwork: SocialNetwork, replyTo: GeneralObject<any>, content: PostContent): Promise<{ [key: string]: any } | undefined> {
+	async reply(socialNetwork: SocialNetwork & {"type": SocialNetworkType.nostr}, replyTo: PostResult, content: PostContent): Promise<nostrtools.VerifiedEvent>;
+	async reply(socialNetwork: SocialNetwork, replyTo: PostResult, content: PostContent): Promise<PostResult | undefined>;
+	async reply(socialNetwork: SocialNetwork, replyTo: PostResult, content: PostContent): Promise<PostResult | undefined> {
 		switch (socialNetwork.type) {
 			case SocialNetworkType.mastodon:
 				const masto = Masto({
@@ -390,12 +395,12 @@ export default class Poster {
 					"facets": rt.facets,
 					"reply": {
 						"root": {
-							"uri": replyTo.root.uri,
-							"cid": replyTo.root.cid
+							"uri": replyTo.root!.uri,
+							"cid": replyTo.root!.cid
 						},
 						"parent": {
-							"uri": replyTo.parent.uri,
-							"cid": replyTo.parent.cid
+							"uri": replyTo.parent!.uri,
+							"cid": replyTo.parent!.cid
 						}
 					}
 				};
@@ -416,7 +421,7 @@ export default class Poster {
 					},
 					"region": "us-west-2"
 				});
-				const key = replyTo.key;
+				const key = replyTo.key!;
 
 				const existingContent = await client.getObject({
 					"Bucket": socialNetwork.credentials.bucket,
@@ -438,10 +443,10 @@ export default class Poster {
 					console.error(`Invalid private key type: ${privateKey.type}`);
 					break;
 				}
-				const existingPostTags = replyTo.tags.filter((tag: string[]) => tag[0] === "e");
+				const existingPostTags = (replyTo.tags as string[][]).filter((tag: string[]) => tag[0] === "e");
 				let tags: string[][] = [
 					...existingPostTags,
-					["e", replyTo.id, "wss://nostrrelay.win", existingPostTags.length === 0 ? "root" : "reply"]
+					["e", replyTo.id!, "wss://nostrrelay.win", existingPostTags.length === 0 ? "root" : "reply"]
 				];
 				const includeHashtags: boolean = socialNetwork.settings?.includeHashtags ?? defaultIncludeHashtags(socialNetwork.type);
 				if (includeHashtags) {
@@ -455,7 +460,7 @@ export default class Poster {
 				}, privateKey.data);
 				try {
 					await Promise.all(pool.publish(socialNetwork.credentials.relays, event));
-				} catch (e) {}
+				} catch {}
 				return event;
 		}
 	}
