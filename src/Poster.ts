@@ -15,7 +15,7 @@ import * as blurhash from "blurhash";
 import { getImageSize } from "./utils/getImageSize";
 import { Main } from "@atproto/api/dist/client/types/app/bsky/richtext/facet";
 
-interface PostResult {
+export interface PostResult {
 	id?: string;
 	pubkey?: string;
 	parent?: { uri: string; cid: string };
