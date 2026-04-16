@@ -90,6 +90,16 @@ interface NostrSocialNetwork {
 		 */
 		postURLRemap?: string;
 	};
+	/**
+	 * Optional custom event handler. When provided, the prepared event data (kind, content, tags)
+	 * is passed to this function instead of being signed and published using the default nostr-tools
+	 * flow. Useful for custom signing flows (e.g. NIP-46 remote signing), proof-of-work mining, or
+	 * routing through relay proxies.
+	 *
+	 * When using `eventHandler`, the `credentials.privateKey` and `credentials.relays` fields are
+	 * not used.
+	 */
+	eventHandler?: (event: { kind: number; content: string; tags: string[][] }) => Promise<any>;
 	listen: boolean;
 }
 export type SocialNetwork = MastodonSocialNetwork | S3SocialNetwork | BlueskySocialNetwork | NostrSocialNetwork;

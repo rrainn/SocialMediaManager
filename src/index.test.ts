@@ -1,4 +1,4 @@
-import { Poster, handleExtraBlueskyFacets, SocialNetworkType, defaultIncludeHashtags } from "./index";
+import { Poster, handleExtraBlueskyFacets, SocialNetworkType, defaultIncludeHashtags, parseMentions } from "./index";
 
 describe("Package exports", () => {
 	test("Poster class should be exported", () => {
@@ -19,5 +19,10 @@ describe("Package exports", () => {
 	test("defaultIncludeHashtags should be exported", () => {
 		expect(defaultIncludeHashtags(SocialNetworkType.mastodon)).toBe(true);
 		expect(defaultIncludeHashtags(SocialNetworkType.bluesky)).toBe(true);
+	});
+
+	test("parseMentions should be exported", () => {
+		expect(parseMentions).toBeDefined();
+		expect(typeof parseMentions).toBe("function");
 	});
 });

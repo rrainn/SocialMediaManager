@@ -7,6 +7,7 @@ import { createRestAPIClient as Masto } from "masto";
 
 import { resizeImage } from "./utils/resizeImage";
 import { parseHashtags } from "./utils/parseHashtags";
+import { parseMentions } from "./utils/parseMentions";
 import { defaultIncludeHashtags, SocialNetwork, SocialNetworkType } from "./types/Config";
 
 import { createHash, randomUUID } from "crypto";
@@ -203,17 +204,16 @@ export default class Poster {
 					key
 				};
 			case "nostr":
-				const pool = new nostrtools.SimplePool();
-				const privateKey = nostrtools.nip19.decode(socialNetwork.credentials.privateKey);
-				if (privateKey.type !== "nsec") {
-					console.error(`Invalid private key type: ${privateKey.type}`);
-					break;
-				}
 				let tags: string[][] = [];
 				const includeHashtags: boolean = socialNetwork.settings?.includeHashtags ?? defaultIncludeHashtags(socialNetwork.type);
 				if (includeHashtags) {
 					tags = parseHashtags(content.message).map((tag) => ["t", tag.toLowerCase()]);
 				}
+
+				// Parse nostr mentions (NIP-27) — converts @npub/nostr:npub to canonical format and generates "p" tags
+				const mentionResult = parseMentions(content.message);
+				let nostrContent = mentionResult.content;
+				tags = [...tags, ...mentionResult.tags];
 
 				let imageURL: string | undefined;
 				if (content.image) {
@@ -288,11 +288,30 @@ export default class Poster {
 					}
 				}
 
+				const finalContent = imageURL ? `${nostrContent} ${imageURL}` : nostrContent;
+
+				// If an eventHandler is provided, delegate event finalization/publishing to it
+				if (socialNetwork.eventHandler) {
+					return await socialNetwork.eventHandler({
+						"kind": 1,
+						"content": finalContent,
+						"tags": tags
+					});
+				}
+
+				// Default: sign locally and publish to relays
+				const pool = new nostrtools.SimplePool();
+				const privateKey = nostrtools.nip19.decode(socialNetwork.credentials.privateKey);
+				if (privateKey.type !== "nsec") {
+					console.error(`Invalid private key type: ${privateKey.type}`);
+					break;
+				}
+
 				const event = nostrtools.finalizeEvent({
 					"kind": 1,
 					"created_at": Math.floor(Date.now() / 1000),
 					"tags": tags,
-					"content": imageURL ? `${content.message} ${imageURL}` : content.message
+					"content": finalContent
 				}, privateKey.data);
 				try {
 					await Promise.all(pool.publish(socialNetwork.credentials.relays, event));
