@@ -263,7 +263,7 @@ export default class Poster {
 
 				// Parse nostr mentions (NIP-27) — converts @npub/nostr:npub to canonical format and generates "p" tags
 				const mentionResult = parseMentions(content.message);
-				let nostrContent = mentionResult.content;
+				const nostrContent = mentionResult.content;
 				tags = [...tags, ...mentionResult.tags];
 
 				let imageURL: string | undefined;

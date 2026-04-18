@@ -142,7 +142,14 @@ interface NostrSocialNetwork {
 	 * When using `eventHandler`, the `credentials.privateKey` and `credentials.relays` fields are
 	 * not used.
 	 */
-	eventHandler?: (event: { kind: number; content: string; tags: string[][] }) => Promise<any>;
+	eventHandler?: (event: { kind: number; content: string; tags: string[][] }) => Promise<{
+		id?: string;
+		pubkey?: string;
+		parent?: { uri: string; cid: string };
+		root?: { uri: string; cid: string };
+		key?: string;
+		tags?: unknown;
+	} | undefined>;
 	listen: boolean;
 }
 export type SocialNetwork = MastodonSocialNetwork | S3SocialNetwork | BlueskySocialNetwork | NostrSocialNetwork | PixelfedSocialNetwork;
