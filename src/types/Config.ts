@@ -31,6 +31,38 @@ interface MastodonSocialNetwork {
 	};
 	listen: boolean;
 }
+interface PixelfedSocialNetwork {
+	uuid: `${string}-${string}-${string}-${string}-${string}`
+	name: string;
+	type: SocialNetworkType.pixelfed;
+	credentials: {
+		/**
+		 * The base URL of the Pixelfed instance (e.g. `https://pixelfed.social`).
+		 */
+		endpoint: string;
+		/**
+		 * OAuth bearer access token for the Pixelfed account. Pixelfed uses the
+		 * Mastodon-compatible OAuth flow; the token must include at least the
+		 * `write` scope to publish posts.
+		 */
+		password: string;
+	};
+	settings?: {
+		includeHashtags?: boolean;
+		/**
+		 * The maximum number of times to poll Pixelfed for media processing
+		 * completion before giving up and attempting to publish anyway.
+		 * Defaults to 10.
+		 */
+		mediaProcessingPollAttempts?: number;
+		/**
+		 * The number of milliseconds to wait between media processing polls.
+		 * Defaults to 1000ms.
+		 */
+		mediaProcessingPollIntervalMs?: number;
+	};
+	listen: boolean;
+}
 interface BlueskySocialNetwork {
 	uuid: `${string}-${string}-${string}-${string}-${string}`
 	name: string;
@@ -102,13 +134,14 @@ interface NostrSocialNetwork {
 	eventHandler?: (event: { kind: number; content: string; tags: string[][] }) => Promise<any>;
 	listen: boolean;
 }
-export type SocialNetwork = MastodonSocialNetwork | S3SocialNetwork | BlueskySocialNetwork | NostrSocialNetwork;
+export type SocialNetwork = MastodonSocialNetwork | S3SocialNetwork | BlueskySocialNetwork | NostrSocialNetwork | PixelfedSocialNetwork;
 
 export enum SocialNetworkType {
 	mastodon = "mastodon",
 	s3 = "s3",
 	bluesky = "bluesky",
 	nostr = "nostr",
+	pixelfed = "pixelfed",
 }
 
 /**
@@ -119,6 +152,7 @@ export function defaultIncludeHashtags(type: SocialNetworkType): boolean {
 		case SocialNetworkType.mastodon:
 		case SocialNetworkType.nostr:
 		case SocialNetworkType.bluesky:
+		case SocialNetworkType.pixelfed:
 			return true;
 		case SocialNetworkType.s3:
 			return false;

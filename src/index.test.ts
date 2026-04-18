@@ -14,11 +14,15 @@ describe("Package exports", () => {
 		expect(SocialNetworkType.mastodon).toBe("mastodon");
 		expect(SocialNetworkType.nostr).toBe("nostr");
 		expect(SocialNetworkType.s3).toBe("s3");
+		expect(SocialNetworkType.pixelfed).toBe("pixelfed");
 	});
 
 	test("defaultIncludeHashtags should be exported", () => {
 		expect(defaultIncludeHashtags(SocialNetworkType.mastodon)).toBe(true);
 		expect(defaultIncludeHashtags(SocialNetworkType.bluesky)).toBe(true);
+		expect(defaultIncludeHashtags(SocialNetworkType.pixelfed)).toBe(true);
+		expect(defaultIncludeHashtags(SocialNetworkType.nostr)).toBe(true);
+		expect(defaultIncludeHashtags(SocialNetworkType.s3)).toBe(false);
 	});
 
 	test("parseMentions should be exported", () => {

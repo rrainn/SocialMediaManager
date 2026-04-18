@@ -78,6 +78,31 @@ export default class Poster {
 		return bluesky;
 	}
 
+	async #waitForPixelfedMedia(
+		client: ReturnType<typeof Masto>,
+		uploaded: { id: string; url?: string | null },
+		socialNetwork: SocialNetwork & {"type": SocialNetworkType.pixelfed}
+	): Promise<string> {
+		if (uploaded.url) {
+			return uploaded.id;
+		}
+		const maxAttempts = socialNetwork.settings?.mediaProcessingPollAttempts ?? 10;
+		const intervalMs = socialNetwork.settings?.mediaProcessingPollIntervalMs ?? 1000;
+		for (let attempt = 0; attempt < maxAttempts; attempt++) {
+			await new Promise((resolve) => setTimeout(resolve, intervalMs));
+			try {
+				const polled = await client.v1.media.$select(uploaded.id).fetch();
+				if (polled.url) {
+					return polled.id;
+				}
+			} catch (e) {
+				console.error(`Error polling Pixelfed media ${uploaded.id} (${socialNetwork.uuid})`, e);
+			}
+		}
+		console.warn(`Pixelfed media ${uploaded.id} did not finish processing after ${maxAttempts} polls; attempting to publish anyway (${socialNetwork.uuid})`);
+		return uploaded.id;
+	}
+
 	async post(socialNetwork: SocialNetwork & {"type": SocialNetworkType.bluesky}, content: PostContent): Promise<{
 		"root": {
 			uri: string;
@@ -114,6 +139,25 @@ export default class Poster {
 						: { "status": content.message }
 				);
 				return mastodonResult;
+			}
+			case "pixelfed": {
+				if (!content.image) {
+					throw new Error(`Pixelfed posts require an image (${socialNetwork.uuid})`);
+				}
+				const pixelfed = Masto({
+					"url": `${socialNetwork.credentials.endpoint}`,
+					"accessToken": socialNetwork.credentials.password
+				});
+				const uploaded = await pixelfed.v1.media.create({
+					"file": new Blob([new Uint8Array(content.image.content)], { "type": "image/png" }),
+					"description": content.image.alt ?? ""
+				});
+				const mediaId = await this.#waitForPixelfedMedia(pixelfed, uploaded, socialNetwork);
+				const pixelfedResult = await pixelfed.v1.statuses.create({
+					"status": content.message,
+					"mediaIds": [mediaId]
+				});
+				return pixelfedResult;
 			}
 			case "bluesky": {
 				const bluesky = await this.#getBlueskyAgent(socialNetwork);
@@ -342,6 +386,14 @@ export default class Poster {
 				const mastodonResult = await masto.v1.statuses.$select(repost.id!).reblog();
 				return mastodonResult;
 			}
+			case "pixelfed": {
+				const pixelfed = Masto({
+					"url": `${socialNetwork.credentials.endpoint}`,
+					"accessToken": socialNetwork.credentials.password
+				});
+				const pixelfedResult = await pixelfed.v1.statuses.$select(repost.id!).reblog();
+				return pixelfedResult;
+			}
 			case "bluesky": {
 				const bluesky = await this.#getBlueskyAgent(socialNetwork);
 
@@ -402,6 +454,26 @@ export default class Poster {
 					"inReplyToId": replyTo.id
 				});
 				return mastodonResult;
+			case SocialNetworkType.pixelfed: {
+				if (!content.image) {
+					throw new Error(`Pixelfed replies require an image (${socialNetwork.uuid})`);
+				}
+				const pixelfed = Masto({
+					"url": `${socialNetwork.credentials.endpoint}`,
+					"accessToken": socialNetwork.credentials.password
+				});
+				const uploaded = await pixelfed.v1.media.create({
+					"file": new Blob([new Uint8Array(content.image.content)], { "type": "image/png" }),
+					"description": content.image.alt ?? ""
+				});
+				const mediaId = await this.#waitForPixelfedMedia(pixelfed, uploaded, socialNetwork);
+				const pixelfedResult = await pixelfed.v1.statuses.create({
+					"status": content.message,
+					"inReplyToId": replyTo.id,
+					"mediaIds": [mediaId]
+				});
+				return pixelfedResult;
+			}
 			case SocialNetworkType.bluesky:
 				const bluesky = await this.#getBlueskyAgent(socialNetwork);
 
