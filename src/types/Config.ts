@@ -17,6 +17,26 @@ export interface Config {
 	}
 }
 
+/**
+ * Settings controlling how the client polls a server while it asynchronously
+ * processes an uploaded media attachment (e.g. transcoding, thumbnail
+ * generation). Applies to platforms whose media upload endpoint may return
+ * before the attachment is ready to be referenced from a post.
+ */
+export interface MediaProcessingSettings {
+	/**
+	 * The maximum number of times to poll the server for media processing
+	 * completion before giving up and attempting to publish anyway.
+	 * Defaults to 10.
+	 */
+	pollAttempts?: number;
+	/**
+	 * The number of milliseconds to wait between media processing polls.
+	 * Defaults to 1000ms.
+	 */
+	pollIntervalMs?: number;
+}
+
 interface MastodonSocialNetwork {
 	uuid: `${string}-${string}-${string}-${string}-${string}`
 	name: string;
@@ -28,6 +48,29 @@ interface MastodonSocialNetwork {
 	};
 	settings?: {
 		includeHashtags?: boolean;
+		mediaProcessing?: MediaProcessingSettings;
+	};
+	listen: boolean;
+}
+interface PixelfedSocialNetwork {
+	uuid: `${string}-${string}-${string}-${string}-${string}`
+	name: string;
+	type: SocialNetworkType.pixelfed;
+	credentials: {
+		/**
+		 * The base URL of the Pixelfed instance (e.g. `https://pixelfed.social`).
+		 */
+		endpoint: string;
+		/**
+		 * OAuth bearer access token for the Pixelfed account. Pixelfed uses the
+		 * Mastodon-compatible OAuth flow; the token must include at least the
+		 * `write` scope to publish posts.
+		 */
+		password: string;
+	};
+	settings?: {
+		includeHashtags?: boolean;
+		mediaProcessing?: MediaProcessingSettings;
 	};
 	listen: boolean;
 }
@@ -99,16 +142,24 @@ interface NostrSocialNetwork {
 	 * When using `eventHandler`, the `credentials.privateKey` and `credentials.relays` fields are
 	 * not used.
 	 */
-	eventHandler?: (event: { kind: number; content: string; tags: string[][] }) => Promise<any>;
+	eventHandler?: (event: { kind: number; content: string; tags: string[][] }) => Promise<{
+		id?: string;
+		pubkey?: string;
+		parent?: { uri: string; cid: string };
+		root?: { uri: string; cid: string };
+		key?: string;
+		tags?: unknown;
+	} | undefined>;
 	listen: boolean;
 }
-export type SocialNetwork = MastodonSocialNetwork | S3SocialNetwork | BlueskySocialNetwork | NostrSocialNetwork;
+export type SocialNetwork = MastodonSocialNetwork | S3SocialNetwork | BlueskySocialNetwork | NostrSocialNetwork | PixelfedSocialNetwork;
 
 export enum SocialNetworkType {
 	mastodon = "mastodon",
 	s3 = "s3",
 	bluesky = "bluesky",
 	nostr = "nostr",
+	pixelfed = "pixelfed",
 }
 
 /**
@@ -119,6 +170,7 @@ export function defaultIncludeHashtags(type: SocialNetworkType): boolean {
 		case SocialNetworkType.mastodon:
 		case SocialNetworkType.nostr:
 		case SocialNetworkType.bluesky:
+		case SocialNetworkType.pixelfed:
 			return true;
 		case SocialNetworkType.s3:
 			return false;
