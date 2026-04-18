@@ -17,6 +17,26 @@ export interface Config {
 	}
 }
 
+/**
+ * Settings controlling how the client polls a server while it asynchronously
+ * processes an uploaded media attachment (e.g. transcoding, thumbnail
+ * generation). Applies to platforms whose media upload endpoint may return
+ * before the attachment is ready to be referenced from a post.
+ */
+export interface MediaProcessingSettings {
+	/**
+	 * The maximum number of times to poll the server for media processing
+	 * completion before giving up and attempting to publish anyway.
+	 * Defaults to 10.
+	 */
+	pollAttempts?: number;
+	/**
+	 * The number of milliseconds to wait between media processing polls.
+	 * Defaults to 1000ms.
+	 */
+	pollIntervalMs?: number;
+}
+
 interface MastodonSocialNetwork {
 	uuid: `${string}-${string}-${string}-${string}-${string}`
 	name: string;
@@ -28,6 +48,7 @@ interface MastodonSocialNetwork {
 	};
 	settings?: {
 		includeHashtags?: boolean;
+		mediaProcessing?: MediaProcessingSettings;
 	};
 	listen: boolean;
 }
@@ -49,17 +70,7 @@ interface PixelfedSocialNetwork {
 	};
 	settings?: {
 		includeHashtags?: boolean;
-		/**
-		 * The maximum number of times to poll Pixelfed for media processing
-		 * completion before giving up and attempting to publish anyway.
-		 * Defaults to 10.
-		 */
-		mediaProcessingPollAttempts?: number;
-		/**
-		 * The number of milliseconds to wait between media processing polls.
-		 * Defaults to 1000ms.
-		 */
-		mediaProcessingPollIntervalMs?: number;
+		mediaProcessing?: MediaProcessingSettings;
 	};
 	listen: boolean;
 }
